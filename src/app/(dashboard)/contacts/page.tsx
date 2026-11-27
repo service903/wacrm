@@ -49,6 +49,7 @@ import {
   SlidersHorizontal,
   Filter,
   X,
+  Tag as TagIcon,
 } from 'lucide-react';
 import { ContactForm } from '@/components/contacts/contact-form';
 import { ContactDetailView } from '@/components/contacts/contact-detail-view';
@@ -333,6 +334,71 @@ export default function ContactsPage() {
     setBulkDeleteOpen(false);
   }
 
+  const [bulkTagging, setBulkTagging] = useState(false);
+
+  async function handleBulkAddTag(tagId: string) {
+    const ids = Array.from(selected);
+    if (ids.length === 0 || bulkTagging) return;
+    setBulkTagging(true);
+
+    const tag = tagsMap[tagId];
+    const tagName = tag?.name ?? 'Tag';
+
+    const rows = ids.map((cid) => ({
+      contact_id: cid,
+      tag_id: tagId,
+    }));
+
+    const { error } = await supabase
+      .from('contact_tags')
+      .upsert(rows, { onConflict: 'contact_id,tag_id', ignoreDuplicates: true });
+
+    if (error) {
+      console.error('Error adding bulk tags:', error);
+      toast.error('Failed to add tag to selected contacts');
+    } else {
+      toast.success(`Tagged ${ids.length} contacts with "${tagName}"`);
+      await fetchContacts();
+    }
+
+    setBulkTagging(false);
+  }
+
+  async function handleBulkRemoveTag(tagId: string) {
+    const ids = Array.from(selected);
+    if (ids.length === 0 || bulkTagging) return;
+    setBulkTagging(true);
+
+    const tag = tagsMap[tagId];
+    const tagName = tag?.name ?? 'Tag';
+
+    const { error } = await supabase
+      .from('contact_tags')
+      .delete()
+      .eq('tag_id', tagId)
+      .in('contact_id', ids);
+
+    if (error) {
+      console.error('Error removing bulk tags:', error);
+      toast.error('Failed to remove tag from selected contacts');
+    } else {
+      toast.success(`Removed tag "${tagName}" from ${ids.length} contacts`);
+      await fetchContacts();
+    }
+
+    setBulkTagging(false);
+  }
+
+  async function handleSelectAllTotalContacts() {
+    setBulkTagging(true);
+    const { data, error } = await supabase.from('contacts').select('id');
+    if (data && !error) {
+      setSelected(new Set(data.map((c) => c.id)));
+      toast.info(`Selected all ${data.length} contacts`);
+    }
+    setBulkTagging(false);
+  }
+
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
   const hasNext = page < totalPages - 1;
   const hasPrev = page > 0;
@@ -519,11 +585,110 @@ export default function ContactsPage() {
 
       {/* Bulk action bar */}
       {selected.size > 0 && (
-        <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/40 px-4 py-2">
-          <p className="text-sm text-foreground">
-            {t('selectedCount', { count: selected.size })}
-          </p>
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border bg-muted/40 px-4 py-2">
           <div className="flex items-center gap-2">
+            <p className="text-sm font-medium text-foreground">
+              {t('selectedCount', { count: selected.size })}
+            </p>
+            {totalCount > PAGE_SIZE && selected.size === contacts.length && selected.size < totalCount && (
+              <Button
+                variant="link"
+                size="sm"
+                onClick={handleSelectAllTotalContacts}
+                className="h-auto p-0 text-xs text-primary underline"
+              >
+                Select all {totalCount} contacts
+              </Button>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Bulk Tag button */}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={bulkTagging}
+                    className="gap-1.5 border-border text-foreground hover:bg-muted"
+                  >
+                    {bulkTagging ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <TagIcon className="size-4" />
+                    )}
+                    Add Tag
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="end" className="w-56 border-border bg-popover">
+                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                  Add tag to {selected.size} selected
+                </div>
+                <DropdownMenuSeparator />
+                {allTags.length === 0 ? (
+                  <div className="px-2 py-2 text-xs text-muted-foreground">
+                    No tags available
+                  </div>
+                ) : (
+                  allTags.map((tag) => (
+                    <DropdownMenuItem
+                      key={tag.id}
+                      onClick={() => handleBulkAddTag(tag.id)}
+                      className="cursor-pointer gap-2"
+                    >
+                      <span
+                        className="size-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: tag.color }}
+                      />
+                      <span className="truncate">{tag.name}</span>
+                    </DropdownMenuItem>
+                  ))
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Bulk Remove Tag button */}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={bulkTagging}
+                    className="gap-1.5 border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                  >
+                    Remove Tag
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="end" className="w-56 border-border bg-popover">
+                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                  Remove tag from {selected.size} selected
+                </div>
+                <DropdownMenuSeparator />
+                {allTags.length === 0 ? (
+                  <div className="px-2 py-2 text-xs text-muted-foreground">
+                    No tags available
+                  </div>
+                ) : (
+                  allTags.map((tag) => (
+                    <DropdownMenuItem
+                      key={tag.id}
+                      onClick={() => handleBulkRemoveTag(tag.id)}
+                      className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+                    >
+                      <span
+                        className="size-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: tag.color }}
+                      />
+                      <span className="truncate">{tag.name}</span>
+                    </DropdownMenuItem>
+                  ))
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <Button
               variant="ghost"
               size="sm"
