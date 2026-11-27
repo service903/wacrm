@@ -30,15 +30,16 @@ export async function generateMetadata(): Promise<Metadata> {
 
 const metadata: Metadata = {
   title: {
-    default: "wacrm",
-    template: "%s — wacrm",
+    default: "Legalright CRM",
+    template: "%s — Legalright CRM",
   },
   robots: {
     index: false,
     follow: false,
   },
   icons: {
-    icon: [{ url: "/icon" }],
+    icon: [{ url: "/icon.png" }],
+    apple: [{ url: "/icon-192.png" }],
   },
   formatDetection: {
     email: false,
